@@ -19,6 +19,46 @@ const typeDefs = `#graphql
         createdAt: Date!
         host: User!
         members: [User]!
+        issues: [Issue!]!
+    }
+
+    type Issue {
+        id: ID!
+        title: String!
+        description: String
+        status: IssueStatus!
+        priority: IssuePriority!
+        createdAt: Date!
+        reporter: User!
+        assignees: [User!]!
+        project: Project!
+    }
+
+    input IssueInput {
+        title: String!
+        description: String
+        priority: IssuePriority!
+    }
+
+    input UpdateIssueInput {
+        title: String
+        description: String
+        status: IssueStatus
+        priority: IssuePriority
+    }
+
+    enum IssueStatus {
+        OPEN
+        IN_PROGRESS
+        RESOLVED
+        CLOSED
+    }
+
+    enum IssuePriority {
+        LOW
+        MEDIUM
+        HIGH
+        CRITICAL
     }
 
     input ProjectInput {
@@ -48,6 +88,8 @@ const typeDefs = `#graphql
         myProjects: [Project!]!
         project(id: ID!): Project
         searchProjects(keyword: String): [Project!]!
+        issues(projectId: ID!): [Issue!]!
+        issue(id: ID!): Issue
     }
 
     type Mutation {
@@ -58,7 +100,12 @@ const typeDefs = `#graphql
         removeProjectMember(projectId: ID!, userId: ID!): Project
         updateProject(id: ID!, input: ProjectInput!): Project
         deleteProject(id: ID!): Boolean
-    } 
+        createIssue(projectId: ID!, input: IssueInput!): Issue
+        updateIssue(id: ID!, input: UpdateIssueInput!): Issue
+        deleteIssue(id: ID!): Boolean
+        assignUsersToIssue(issueId: ID!, userIds: [ID!]!): Issue
+        removeUserFromIssue(issueId: ID!, userId: ID!): Issue
+    }
 `;
 
 module.exports = typeDefs;

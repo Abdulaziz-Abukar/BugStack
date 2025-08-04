@@ -12,7 +12,7 @@ const projectSchema = new mongoose.Schema({
   },
   host: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-  // issues Schema reference in an array
+  issues: [{ type: mongoose.Schema.Types.ObjectId, ref: "Issue" }],
   // eventual feature: updatedAt -> creates a date for updated time
 });
 

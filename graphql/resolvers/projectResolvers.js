@@ -2,8 +2,16 @@ const { GraphQLError } = require("graphql");
 const mongoose = require("mongoose");
 const User = require("../../models/User");
 const Project = require("../../models/Project");
+const Issue = require("../../models/Issue");
 
 const projectResolvers = {
+  Project: {
+    issues: async (parent) => {
+      return await Issue.find({ project: parent._id })
+        .populate("reporter")
+        .populate("assignees");
+    },
+  },
   Query: {
     myProjects: async (_, __, { user }) => {
       try {
