@@ -1,4 +1,9 @@
 const { GraphQLError } = require("graphql");
+const {
+  requireAuth,
+  handleGraphQLError,
+  validateResourceExists,
+} = require("../../utils/authHelpers");
 const User = require("../../models/User");
 const { signToken } = require("../../utils/auth");
 const bcrypt = require("bcrypt");
@@ -6,7 +11,7 @@ const bcrypt = require("bcrypt");
 const userResolvers = {
   Query: {
     me: async (_, __, { user }) => {
-      if (!user) throw new GraphQLError("Not authenticated");
+      requireAuth(user);
       return await User.findById(user.id); // populate with projects soon.
     },
   },
@@ -26,8 +31,7 @@ const userResolvers = {
 
         return { token, user: newUser };
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message);
+        handleGraphQLError(err);
       }
     },
 
@@ -35,17 +39,16 @@ const userResolvers = {
       try {
         const user = await User.findOne({ email: input.email });
 
-        if (!user) throw new GraphQLError("Invalid email or password");
+        validateResourceExists(user, "name or password");
 
         const isValid = await bcrypt.compare(input.password, user.password);
 
-        if (!isValid) throw new GraphQLError("Invalid email or password");
+        validateResourceExists(isValid, "name or password");
 
         const token = signToken(user);
         return { token, user };
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
   },

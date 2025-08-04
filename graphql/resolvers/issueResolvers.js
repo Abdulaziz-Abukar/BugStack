@@ -1,4 +1,12 @@
 const { GraphQLError } = require("graphql");
+const {
+  requireAuth,
+  handleGraphQLError,
+  validateObjectId,
+  validateResourceExists,
+  checkProjectAccess,
+  checkHostAccess,
+} = require("../../utils/authHelpers");
 const mongoose = require("mongoose");
 const User = require("../../models/User");
 const Project = require("../../models/Project");
@@ -8,23 +16,18 @@ const issueResolvers = {
   Query: {
     issues: async (_, { projectId }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        if (!mongoose.Types.ObjectId.isValid(projectId)) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(projectId, "Project ID");
 
         const project = await Project.findById(projectId)
           .populate("host")
           .populate("members");
-        if (!project) throw new GraphQLError("Project not found");
-        if (
-          String(project.host.id) !== String(user._id) &&
-          !project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError("Not authorized to access these issues");
-        }
+        validateResourceExists(project, "Project");
+        checkProjectAccess(
+          project,
+          user,
+          "Not authorized to access these issues"
+        );
 
         const issues = await Issue.find({ project: projectId })
           .populate("reporter")
@@ -36,16 +39,13 @@ const issueResolvers = {
 
         return issues;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
     issue: async (_, { id }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(id, "Issue ID");
 
         const issue = await Issue.findById(id)
           .populate("reporter")
@@ -55,21 +55,12 @@ const issueResolvers = {
             populate: { path: "host members" },
           });
 
-        if (!issue) throw new GraphQLError("Issue not found");
-
-        if (
-          String(issue.project.host.id) !== String(user._id) &&
-          !issue.project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError("Not authorized to access this issue");
-        }
+        validateResourceExists(issue, "Issue ID");
+        checkProjectAccess(issue, user, "Not authorized to access this issue");
 
         return issue;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
   },
@@ -81,26 +72,18 @@ const issueResolvers = {
       { user }
     ) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        if (!mongoose.Types.ObjectId.isValid(projectId)) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(projectId, "Project ID");
 
         const project = await Project.findById(projectId)
           .populate("host")
           .populate("members");
-
-        if (!project) throw new GraphQLError("Project not found");
-        if (
-          String(project.host.id) !== String(user._id) &&
-          !project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError(
-            "Not authorized to create an issue for this project"
-          );
-        }
+        validateResourceExists(project, "Project");
+        checkProjectAccess(
+          project,
+          user,
+          "Not authorized to access this project"
+        );
 
         const newIssue = await Issue.create({
           title: title.trim(),
@@ -119,8 +102,7 @@ const issueResolvers = {
           });
         return populatedIssue;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
     updateIssue: async (
@@ -129,10 +111,8 @@ const issueResolvers = {
       { user }
     ) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(id, "Issue ID");
         if (
           title === undefined &&
           description === undefined &&
@@ -147,15 +127,12 @@ const issueResolvers = {
           populate: { path: "host members" },
         });
 
-        if (!issue) throw new GraphQLError("Issue not found");
-        if (
-          String(issue.project.host.id) !== String(user._id) &&
-          !issue.project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError("Not authorized to update this issue");
-        }
+        validateResourceExists(issue, "Issue");
+        checkProjectAccess(
+          issue,
+          user,
+          "Not authorized to update this project"
+        );
 
         if (title !== undefined) {
           const trimmedTitle = title.trim();
@@ -180,49 +157,35 @@ const issueResolvers = {
 
         return updatedIssue;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
     deleteIssue: async (_, { id }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(id, "Issue ID");
 
         const issue = await Issue.findById(id).populate({
           path: "project",
           populate: { path: "host members" },
         });
-        if (!issue) throw new GraphQLError("Issue not found");
-        if (
-          String(issue.project.host.id) !== String(user._id) &&
-          !issue.project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError("Not authorized to delete this issue");
-        }
+
+        validateResourceExists(issue, "Issue");
+        checkProjectAccess(issue, user, "Not authorized to delete this issue");
 
         return (await Issue.findByIdAndDelete(id)) ? true : false;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
     assignUsersToIssue: async (_, { issueId, userIds }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-
-        const issueIDValidation = mongoose.Types.ObjectId.isValid(issueId);
-        if (!issueIDValidation) throw new GraphQLError("Invalid ID Submitted");
+        requireAuth(user);
+        validateObjectId(issueId, "Issue ID");
 
         for (const userId of userIds) {
-          if (!mongoose.Types.ObjectId.isValid(userId)) {
-            throw new GraphQLError("Invalid UserID Submitted");
-          }
+          validateObjectId(userId, "User ID");
         }
 
         const issue = await Issue.findById(issueId)
@@ -233,18 +196,12 @@ const issueResolvers = {
             populate: { path: "host members" },
           });
 
-        if (!issue) throw new GraphQLError("Issue not found");
-
-        if (
-          String(issue.project.host.id) !== String(user._id) &&
-          !issue.project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError(
-            "Not authorized to assign users to this issue"
-          );
-        }
+        validateResourceExists(issue, "Issue ID");
+        checkProjectAccess(
+          issue.project,
+          user,
+          "Not authorized to assign users to this issue"
+        );
 
         // fetch all users by their ids
         const usersToAssign = await User.find({ _id: { $in: userIds } });
@@ -281,20 +238,15 @@ const issueResolvers = {
 
         return populatedIssue;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
     removeUserFromIssue: async (_, { issueId, userId }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        const issueValidation = mongoose.Types.ObjectId.isValid(issueId);
-        const userValidation = mongoose.Types.ObjectId.isValid(userId);
-
-        if (!issueValidation || !userValidation) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(issueId, "Issue ID");
+        validateObjectId(userId, "User ID");
 
         const issue = await Issue.findById(issueId)
           .populate("reporter")
@@ -304,15 +256,12 @@ const issueResolvers = {
             populate: { path: "host members" },
           });
 
-        if (!issue) throw new GraphQLError("Issue not found");
-        if (
-          String(issue.project.host.id) !== String(user._id) &&
-          !issue.project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError("Not authorized to access this issue");
-        }
+        validateResourceExists(issue, "Issue ID");
+        checkProjectAccess(
+          issue.project,
+          user,
+          "Not authorized to access this issue"
+        );
 
         const userAssignee = issue.assignees.find(
           (assignee) => String(assignee._id) === String(userId)
@@ -335,8 +284,7 @@ const issueResolvers = {
           });
         return populatedIssue;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
   },

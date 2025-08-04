@@ -1,4 +1,12 @@
 const { GraphQLError } = require("graphql");
+const {
+  requireAuth,
+  handleGraphQLError,
+  validateObjectId,
+  validateResourceExists,
+  checkProjectAccess,
+  checkHostAccess,
+} = require("../../utils/authHelpers");
 const mongoose = require("mongoose");
 const User = require("../../models/User");
 const Project = require("../../models/Project");
@@ -15,7 +23,7 @@ const projectResolvers = {
   Query: {
     myProjects: async (_, __, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
+        requireAuth(user);
 
         const projects = await Project.find({
           $or: [{ host: user._id }, { members: user._id }],
@@ -25,42 +33,36 @@ const projectResolvers = {
 
         return projects;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
     project: async (_, { id }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        if (!mongoose.Types.ObjectId.isValid(id))
-          throw new GraphQLError("Invalid ID Submitted");
+        requireAuth(user);
+        validateObjectId(id);
 
         const project = await Project.findById(id)
           .populate("host")
           .populate("members");
 
-        if (!project) throw new GraphQLError("Project not found");
+        validateResourceExists(project, "Project");
 
-        if (
-          String(project.host.id) !== String(user._id) &&
-          !project.members.some(
-            (member) => String(member.id) === String(user._id)
-          )
-        ) {
-          throw new GraphQLError("Not authorized to access this project");
-        }
+        checkProjectAccess(
+          project,
+          user,
+          "Not authorized to access this project"
+        );
 
         return project;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
     searchProjects: async (_, { keyword }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
+        requireAuth(user);
 
         const accessFilter = {
           $or: [{ host: user._id }, { members: user._id }],
@@ -84,8 +86,7 @@ const projectResolvers = {
 
         return projects;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
   },
@@ -93,7 +94,7 @@ const projectResolvers = {
   Mutation: {
     createProject: async (_, { input: { title, description } }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
+        requireAuth(user);
 
         const newProject = await Project.create({
           title: title.trim(),
@@ -108,33 +109,26 @@ const projectResolvers = {
         return newProject;
       } catch (err) {
         console.error(err);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
     addProjectMember: async (_, { projectId, userId }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-
-        const projectIdValidation = mongoose.Types.ObjectId.isValid(projectId);
-        const userIdValidation = mongoose.Types.ObjectId.isValid(userId);
-
-        if (!projectIdValidation || !userIdValidation) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(projectId, "Project ID");
+        validateObjectId(userId, "User ID");
 
         const project = await Project.findById(projectId)
           .populate("host")
           .populate("members");
 
-        if (!project) throw new GraphQLError("Project not found");
-
-        if (String(project.host.id) !== String(user._id)) {
-          throw new GraphQLError("Not authorized to access this project");
-        }
+        validateResourceExists(project, "Project");
+        checkHostAccess(project, user);
 
         const newMember = await User.findById(userId);
         if (!newMember) throw new GraphQLError("User not found");
+        validateResourceExists(newMember, "User");
 
         const alreadyMember = project.members.some(
           (member) => String(member.id) === String(userId)
@@ -148,38 +142,29 @@ const projectResolvers = {
         await project.save();
 
         // re-populate updated members list
-        await project.populate("members");
+        await project.populate("host").populate("members");
 
         return project;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
     removeProjectMember: async (_, { projectId, userId }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-
-        const projectIdValidation = mongoose.Types.ObjectId.isValid(projectId);
-        const userIdValidation = mongoose.Types.ObjectId.isValid(userId);
-
-        if (!projectIdValidation || !userIdValidation) {
-          throw new GraphQLError("Invalid ID Submitted");
-        }
+        requireAuth(user);
+        validateObjectId(projectId, "Project ID");
+        validateObjectId(userId, "User ID");
 
         const project = await Project.findById(projectId)
           .populate("host")
           .populate("members");
-        if (!project) throw new GraphQLError("Project not found");
 
-        if (String(project.host.id) !== String(user._id)) {
-          throw new GraphQLError("Not authroized to access this project");
-        }
+        validateResourceExists(project, "Project");
+        checkHostAccess(project, user);
 
         const removeMember = await User.findById(userId);
-
-        if (!removeMember) throw new GraphQLError("User not found");
+        validateResourceExists(removeMember, "User");
 
         const wasMember = project.members.some(
           (member) => String(member._id) === String(userId)
@@ -197,8 +182,7 @@ const projectResolvers = {
 
         return project;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
@@ -208,20 +192,15 @@ const projectResolvers = {
       { user }
     ) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-
-        if (!mongoose.Types.ObjectId.isValid(id))
-          throw new GraphQLError("Invalid ID Submitted");
+        requireAuth(user);
+        validateObjectId(id, "Project ID");
 
         const project = await Project.findById(id)
           .populate("host")
           .populate("members");
 
-        if (!project) throw new GraphQLError("Project not found");
-
-        if (String(project.host.id) !== String(user._id)) {
-          throw new GraphQLError("Not authorized to access this project");
-        }
+        validateResourceExists(project, "Project");
+        checkHostAccess(project, user);
 
         if (title !== undefined) {
           const trimmedTitle = title.trim();
@@ -236,31 +215,26 @@ const projectResolvers = {
 
         return project;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
 
     deleteProject: async (_, { id }, { user }) => {
       try {
-        if (!user) throw new GraphQLError("Not authenticated");
-        if (!mongoose.Types.ObjectId.isValid(id))
-          throw new GraphQLError("Invalid ID Submitted");
+        requireAuth(user);
+        validateObjectId(id, "Project ID");
 
         const project = await Project.findById(id)
           .populate("host")
           .populate("members");
-        if (!project) throw new GraphQLError("Project not found");
-        if (String(project.host.id) !== String(user._id)) {
-          throw new GraphQLError("Not authorized to access this project");
-        }
+        validateResourceExists(project, "Project");
+        checkHostAccess(project, user);
 
         const deletion = await Project.deleteOne({ _id: id });
 
         return deletion.deletedCount > 0;
       } catch (err) {
-        console.error(err.message);
-        throw new GraphQLError(err.message || "Something went wrong");
+        handleGraphQLError(err);
       }
     },
   },
