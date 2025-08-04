@@ -10,7 +10,7 @@ const projectSchema = new mongoose.Schema({
     type: Date,
     default: Date.now(),
   },
-  host: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  host: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   issues: [{ type: mongoose.Schema.Types.ObjectId, ref: "Issue" }],
   // eventual feature: updatedAt -> creates a date for updated time

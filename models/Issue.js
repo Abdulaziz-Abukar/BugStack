@@ -23,9 +23,17 @@ const issueSchema = new mongoose.Schema({
     default: Date.now(),
   },
   // eventual feature: updatedAt -> changes date to updated date
-  reporter: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // who created the issue
+  reporter: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  }, // who created the issue
   assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // who is assigned to it (can be multiple people)
-  project: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
+  project: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Project",
+    required: true,
+  },
 });
 
 module.exports = mongoose.model("Issue", issueSchema);
